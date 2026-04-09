@@ -1,0 +1,12 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+#runner = "probe-rs run --chip RP2040"
+runner = "picotool load -u -v -x -t elf"
+rustflags = ["--cfg", "portable_atomic_unsafe_assume_single_core"]
+
+# get picotool from https://github.com/raspberrypi/pico-sdk-tools/releases
+
+[build]
+target = "thumbv6m-none-eabi"        # Cortex-M0 and Cortex-M0+
+
+[env]
+DEFMT_LOG = "debug"

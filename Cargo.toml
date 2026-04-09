@@ -1,0 +1,30 @@
+[package]
+name = "ajs37_data_panel"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+embedded-hal = "*"
+
+embassy-embedded-hal = { version = "*", features = ["defmt"] }
+embassy-executor = { version = "*", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-time = { version = "*", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-rp = { version = "*", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp2040", "binary-info"] }
+embassy-sync = "*"
+embassy-usb = "*"
+
+defmt = "*"
+defmt-rtt = "*"
+
+cortex-m = { version = "*", features = ["inline-asm"] }
+cortex-m-rt = "*"
+critical-section = "*"
+panic-probe = { version = "*", features = ["print-defmt"] }
+ssd1306 = { version = "0.10.0", features = ["async"] }
+
+#static_cell = "2.1"
+
+
+[profile.release]
+# Enable generation of debug symbols even on release builds
+debug = true
