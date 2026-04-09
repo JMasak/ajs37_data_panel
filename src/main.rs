@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::fmt::Write;
 use core::u8;
 use defmt::*;
 use embassy_executor::Spawner;
@@ -12,6 +11,8 @@ use embassy_rp::peripherals::I2C0;
 use embassy_time::Timer;
 use ssd1306::{I2CDisplayInterface, Ssd1306Async, prelude::*};
 use {defmt_rtt as _, panic_probe as _};
+
+mod figures;
 
 // Program metadata for `picotool info`.
 // This isn't needed, but it's recommended to have these minimal entries.
@@ -45,10 +46,12 @@ async fn main(spawner: Spawner) {
         .into_buffered_graphics_mode();
     display.init().await.unwrap();
     let mut buffer = [0u8; 512];
-    buffer[0] = 0xaa;
-    buffer[129] = 0xaa;
-    buffer[256] = 0xaa;
-    buffer[129 + 256] = 0xaa;
+    draw_figure(&mut buffer, 0, &figures::ONE);
+    draw_figure(&mut buffer, 1, &figures::SIX);
+    draw_figure(&mut buffer, 2, &figures::NINE);
+    draw_figure(&mut buffer, 3, &figures::EIGHT);
+    draw_figure(&mut buffer, 4, &figures::NONE);
+    draw_figure(&mut buffer, 5, &figures::ZERO_BOLD);
     display.draw(&buffer).await.unwrap();
 
     // spawn tasks
@@ -65,6 +68,15 @@ async fn main(spawner: Spawner) {
             3 => Brightness::BRIGHT,
             _ => Brightness::BRIGHTEST,
         };
+        let figure = match i {
+            0 => &figures::ZERO,
+            1 => &figures::ZERO_MED,
+            2 => &figures::ZERO_BOLD,
+            3 => &figures::ZERO_MED,
+            _ => &figures::ZERO,
+        };
+        draw_figure(&mut buffer, 0, figure);
+        display.draw(&buffer).await.unwrap();
         display.set_brightness(brightness).await.unwrap();
         i += 1;
         if i > 4 {
@@ -78,5 +90,15 @@ async fn led_task(mut led: Output<'static>) -> ! {
     loop {
         led.toggle();
         Timer::after_millis(500).await;
+    }
+}
+
+pub fn draw_figure(buffer: &mut [u8], index: usize, figure: &[u8]) {
+    let offset = index * 21 + 1;
+    for i in 0..21 {
+        buffer[offset + i] = figure[i];
+        buffer[offset + i + 128] = figure[i + 21];
+        buffer[offset + i + 256] = figure[i + 42];
+        buffer[offset + i + 384] = figure[i + 63];
     }
 }
