@@ -24,6 +24,9 @@ async fn main() {
         }
 
         editor.draw();
+        draw_text("CTRL+S - copy to clipboard", 20.0, 20.0, 20.0, WHITE);
+
+        draw_text("CTRL+D - paste from clipboards", 20.0, 40.0, 20.0, WHITE);
 
         if input::is_mouse_button_pressed(input::MouseButton::Left) {
             let (posx, posy) = input::mouse_position();
