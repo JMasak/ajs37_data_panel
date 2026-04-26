@@ -22,8 +22,7 @@ critical-section = "*"
 panic-probe = { version = "*", features = ["print-defmt"] }
 ssd1306 = { version = "0.10.0", features = ["async"] }
 
-#static_cell = "2.1"
-
+static_cell = "2.1"
 
 [profile.release]
 # Enable generation of debug symbols even on release builds
