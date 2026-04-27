@@ -9,7 +9,7 @@ use embassy_rp::gpio::{Level, Output};
 use embassy_rp::i2c::{self, Config};
 use embassy_rp::peripherals::{I2C0, USB};
 use embassy_rp::usb::{self, Driver};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex ;
 use embassy_sync::signal::Signal;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::{self, CdcAcmClass};
@@ -35,7 +35,7 @@ const AJS37_NAV_INDICATOR_DATA_4: u16 = 0x46AE;
 const AJS37_NAV_INDICATOR_DATA_5: u16 = 0x46B0;
 const AJS37_NAV_INDICATOR_DATA_6: u16 = 0x46B2;
 
-static FIGURE_SIGNAL: Signal<CriticalSectionRawMutex, [u8; 6]> = Signal::new();
+static FIGURE_SIGNAL: Signal<ThreadModeRawMutex, [u8; 6]> = Signal::new(); // for multicore usage replace ThreadModeRawMutex with CriticalSectionRawMutex
 
 // Program metadata for `picotool info`.
 // This isn't needed, but it's recommended to have these minimal entries.
@@ -70,12 +70,6 @@ async fn main(spawner: Spawner) {
         .into_buffered_graphics_mode();
     display.init().await.unwrap();
     let mut buffer = [0u8; 512];
-    draw_figure(&mut buffer, 0, &figures::ONE);
-    draw_figure(&mut buffer, 1, &figures::SIX);
-    draw_figure(&mut buffer, 2, &figures::NINE);
-    draw_figure(&mut buffer, 3, &figures::EIGHT);
-    draw_figure(&mut buffer, 4, &figures::NONE);
-    draw_figure(&mut buffer, 5, &figures::ZERO_BOLD);
     display.draw(&buffer).await.unwrap();
 
     // initialize USB

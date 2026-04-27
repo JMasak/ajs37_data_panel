@@ -19,6 +19,7 @@ pub const ZERO_MED: [u8; (FIGURE_WIDTH * FIGURE_HEIGHT) / FIGURE_PIXELS_PER_BYTE
     0, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 3, 15, 28, 48, 32, 96, 96, 64, 96, 96, 32, 48, 28, 15, 3,
     0, 0, 0,
 ];
+#[allow(unused)]
 pub const ZERO_BOLD: [u8; (FIGURE_WIDTH * FIGURE_HEIGHT) / FIGURE_PIXELS_PER_BYTE] = [
     0, 0, 0, 192, 240, 248, 60, 12, 6, 6, 6, 6, 6, 12, 60, 248, 240, 192, 0, 0, 0, 0, 0, 255, 255,
     255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0,
