@@ -9,8 +9,8 @@ use embassy_rp::gpio::{Level, Output};
 use embassy_rp::i2c::{self, Config};
 use embassy_rp::peripherals::{I2C0, USB};
 use embassy_rp::usb::{self, Driver};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::channel::{Channel, Sender};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::{self, CdcAcmClass};
 use embassy_usb::driver::EndpointError;
@@ -35,7 +35,7 @@ const AJS37_NAV_INDICATOR_DATA_4: u16 = 0x46AE;
 const AJS37_NAV_INDICATOR_DATA_5: u16 = 0x46B0;
 const AJS37_NAV_INDICATOR_DATA_6: u16 = 0x46B2;
 
-static FIGURE_CHANNEL: StaticCell<Channel<NoopRawMutex, [u8; 6], 3>> = StaticCell::new();
+static FIGURE_SIGNAL: Signal<CriticalSectionRawMutex, [u8; 6]> = Signal::new();
 
 // Program metadata for `picotool info`.
 // This isn't needed, but it's recommended to have these minimal entries.
@@ -100,15 +100,14 @@ async fn main(spawner: Spawner) {
         static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
         static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
 
-        let builder = embassy_usb::Builder::new(
+        embassy_usb::Builder::new(
             usb_driver,
             usb_config,
             CONFIG_DESCRIPTOR.init([0; 256]),
             BOS_DESCRIPTOR.init([0; 256]),
             &mut [], // no msos descriptors
             CONTROL_BUF.init([0; 64]),
-        );
-        builder
+        )
     };
 
     // Create classes on the builder.
@@ -121,17 +120,15 @@ async fn main(spawner: Spawner) {
     // Build the builder.
     let usb = builder.build();
 
-    let figures_channel = FIGURE_CHANNEL.init(Channel::<NoopRawMutex, [u8; 6], 3>::new());
-    let sender = figures_channel.sender();
-
+    
     // spawn tasks
     spawner.spawn(led_task(led)).unwrap();
     spawner.spawn(usb_task(usb)).unwrap();
-    spawner.spawn(serial_task(class, sender)).unwrap();
+    spawner.spawn(serial_task(class)).unwrap();
 
     // main loop
     loop {
-        let data = figures_channel.receive().await;
+        let data = FIGURE_SIGNAL.wait().await;
         for i in 0..6 {
             draw_figure(&mut buffer, i, FIGURES[data[i] as usize]);
         }
@@ -153,10 +150,7 @@ async fn usb_task(mut usb: MyUsbDevice) -> ! {
 }
 
 #[embassy_executor::task]
-async fn serial_task(
-    mut class: CdcAcmClass<'static, Driver<'static, USB>>,
-    sender: Sender<'static, NoopRawMutex, [u8; 6], 3>,
-) -> ! {
+async fn serial_task(mut class: CdcAcmClass<'static, Driver<'static, USB>>) -> ! {
     let mut input_buffer = [0u8; USB_SERIAL_INPUT_BUFFER_SIZE];
     let mut receive_state = dcs_bios::ReceiveState::WaitingForSync;
     let mut read_offset = 0;
@@ -238,7 +232,7 @@ async fn serial_task(
                         if read_offset + len as usize >= write_offset {
                             break;
                         }
-                        if addr >= AJS37_DCS_BIOS_ADDRESS_START && addr < AJS37_DCS_BIOS_ADDRESS_END
+                        if (AJS37_DCS_BIOS_ADDRESS_START..AJS37_DCS_BIOS_ADDRESS_END).contains(&addr)
                         {
                             info!(
                                 "Received AJS37DCS BIOS data: addr=0x{:04x}, len={}",
@@ -262,7 +256,7 @@ async fn serial_task(
                                         );
                                     }
                                 }
-                                sender.send(data.clone()).await;
+                                FIGURE_SIGNAL.signal(data);
                                 debug!("{:#?}", data);
                             }
                         }
@@ -300,15 +294,14 @@ fn get_figure_index(value: &u8) -> u8 {
 }
 
 fn check_for_start_of_frame(input_buffer: &[u8], read_offset: usize, write_offset: usize) -> bool {
-    if read_offset < write_offset + 4 {
-        if input_buffer[read_offset] == 0x55
+    if read_offset < write_offset + 4 &&
+        input_buffer[read_offset] == 0x55
             && input_buffer[read_offset + 1] == 0x55
             && input_buffer[read_offset + 2] == 0x55
             && input_buffer[read_offset + 3] == 0x55
         {
             return true;
         }
-    }
     false
 }
 
@@ -322,12 +315,13 @@ pub fn draw_figure(buffer: &mut [u8], index: usize, figure: &[u8]) {
     }
 }
 
+#[allow(unused)]
 fn draw_value(buffer: &mut [u8], value: u32) {
     let mut first = true;
     let mut current = value % 1000000;
     let mut i: usize = 0;
     while i < 6 {
-        let divisor = 10_u32.pow(5 - i as u32) as u32;
+        let divisor = 10_u32.pow(5 - i as u32);
         let digit = current / divisor;
         current -= digit * divisor;
         let glyph = {
