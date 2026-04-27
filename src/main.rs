@@ -7,9 +7,9 @@ use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::i2c::{self, Config};
-use embassy_rp::peripherals::{I2C0, USB};
+use embassy_rp::peripherals::{I2C0, I2C1, USB};
 use embassy_rp::usb::{self, Driver};
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex ;
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::{self, CdcAcmClass};
@@ -50,6 +50,7 @@ pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
 
 bind_interrupts!(struct Irqs {
     I2C0_IRQ => i2c::InterruptHandler<I2C0>;
+    I2C1_IRQ => i2c::InterruptHandler<I2C1>;
     USBCTRL_IRQ => usb::InterruptHandler<USB>;
 });
 
@@ -59,7 +60,7 @@ async fn main(spawner: Spawner) {
     // initialize LED output
     let led = Output::new(p.PIN_25, Level::Low);
 
-    // initialize I2C
+    // initialize I2C0 -> DataPanelDisplay
     let sda = p.PIN_0;
     let scl = p.PIN_1;
     info!("set up i2c ");
@@ -70,7 +71,20 @@ async fn main(spawner: Spawner) {
         .into_buffered_graphics_mode();
     display.init().await.unwrap();
     let mut buffer = [0u8; 512];
+    for i in 0..6 {
+        draw_figure(&mut buffer, i, FIGURES[8]);
+    }
     display.draw(&buffer).await.unwrap();
+
+    // initialize I2C1 -> WaypointDisplay
+    let sda = p.PIN_2;
+    let scl = p.PIN_3;
+    let i2c = i2c::I2c::new_async(p.I2C1, scl, sda, Irqs, Config::default());
+    let interface = I2CDisplayInterface::new(i2c);
+    let mut waypoint_display =
+        Ssd1306Async::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+            .into_buffered_graphics_mode();
+    waypoint_display.init().await.unwrap();
 
     // initialize USB
     // Create the driver, from the HAL.
@@ -114,11 +128,11 @@ async fn main(spawner: Spawner) {
     // Build the builder.
     let usb = builder.build();
 
-    
     // spawn tasks
     spawner.spawn(led_task(led)).unwrap();
     spawner.spawn(usb_task(usb)).unwrap();
     spawner.spawn(serial_task(class)).unwrap();
+    spawner.spawn(waypoint_task(waypoint_display)).unwrap();
 
     // main loop
     loop {
@@ -135,6 +149,35 @@ async fn led_task(mut led: Output<'static>) -> ! {
     loop {
         led.toggle();
         Timer::after_millis(500).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn waypoint_task(
+    mut waypoint_display: Ssd1306Async<
+        I2CInterface<i2c::I2c<'static, I2C1, i2c::Async>>,
+        DisplaySize128x64,
+        ssd1306::mode::BufferedGraphicsModeAsync<DisplaySize128x64>,
+    >,
+) -> ! {
+    let mut waypoint_buffer = [0u8; 1024];
+    waypoint_display
+        .set_row(0)
+        .await
+        .expect("Could not set row");
+    waypoint_display
+        .set_column(0)
+        .await
+        .expect("Could not set column");
+    loop {
+        for i in 0..1024 {
+            waypoint_buffer[i] = 0xAA;
+            waypoint_display.draw(&waypoint_buffer).await.unwrap();
+            if i % 128 == 0 {
+                info!("Waypoint drawing new line: {}", i);
+            }
+        }
+        waypoint_buffer.fill(0);
     }
 }
 
@@ -226,7 +269,8 @@ async fn serial_task(mut class: CdcAcmClass<'static, Driver<'static, USB>>) -> !
                         if read_offset + len as usize >= write_offset {
                             break;
                         }
-                        if (AJS37_DCS_BIOS_ADDRESS_START..AJS37_DCS_BIOS_ADDRESS_END).contains(&addr)
+                        if (AJS37_DCS_BIOS_ADDRESS_START..AJS37_DCS_BIOS_ADDRESS_END)
+                            .contains(&addr)
                         {
                             info!(
                                 "Received AJS37DCS BIOS data: addr=0x{:04x}, len={}",
@@ -288,14 +332,14 @@ fn get_figure_index(value: &u8) -> u8 {
 }
 
 fn check_for_start_of_frame(input_buffer: &[u8], read_offset: usize, write_offset: usize) -> bool {
-    if read_offset < write_offset + 4 &&
-        input_buffer[read_offset] == 0x55
-            && input_buffer[read_offset + 1] == 0x55
-            && input_buffer[read_offset + 2] == 0x55
-            && input_buffer[read_offset + 3] == 0x55
-        {
-            return true;
-        }
+    if read_offset < write_offset + 4
+        && input_buffer[read_offset] == 0x55
+        && input_buffer[read_offset + 1] == 0x55
+        && input_buffer[read_offset + 2] == 0x55
+        && input_buffer[read_offset + 3] == 0x55
+    {
+        return true;
+    }
     false
 }
 
