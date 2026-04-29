@@ -23,6 +23,7 @@ panic-probe = { version = "*", features = ["print-defmt"] }
 ssd1306 = { version = "0.10.0", features = ["async"] }
 
 static_cell = "2.1"
+uln2003 = "0.4.0"
 
 [profile.release]
 lto = true

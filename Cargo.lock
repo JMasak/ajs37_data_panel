@@ -42,6 +42,7 @@ dependencies = [
  "panic-probe",
  "ssd1306",
  "static_cell",
+ "uln2003",
 ]
 
 [[package]]
@@ -1508,6 +1509,15 @@ name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
+
+[[package]]
+name = "uln2003"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30326deb6c70b669815454c7837dc34a6c9a399e0c1e8960283cbb6c33ef1b12"
+dependencies = [
+ "embedded-hal 1.0.0",
+]
 
 [[package]]
 name = "unicase"
