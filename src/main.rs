@@ -7,9 +7,8 @@ use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::i2c::{self, Config};
-use embassy_rp::peripherals::{I2C0, I2C1, PIO0, USB};
-use embassy_rp::pio::{self, Pio};
-use embassy_rp::pio_programs::stepper::{PioStepper, PioStepperProgram};
+use embassy_rp::peripherals::{I2C0, I2C1, USB};
+use embassy_rp::pio_programs::stepper;
 use embassy_rp::usb::{self, Driver};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::signal::Signal;
@@ -55,7 +54,6 @@ bind_interrupts!(struct Irqs {
     I2C0_IRQ => i2c::InterruptHandler<I2C0>;
     I2C1_IRQ => i2c::InterruptHandler<I2C1>;
     USBCTRL_IRQ => usb::InterruptHandler<USB>;
-    PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
 });
 
 #[embassy_executor::main]
@@ -132,47 +130,15 @@ async fn main(spawner: Spawner) {
     // Build the builder.
     let usb = builder.build();
 
-    let Pio {
-        mut common,
-        irq0,
-        sm0,
-        ..
-    } = Pio::new(p.PIO0, Irqs);
-    let prg = PioStepperProgram::new(&mut common);
-    let mut stepper = PioStepper::new(
-        &mut common,
-        sm0,
-        irq0,
-        p.PIN_6,
-        p.PIN_7,
-        p.PIN_8,
-        p.PIN_9,
-        &prg,
-    );
-
-    let mut freq = 100;
-    let mut steps = 2048;
-
-    stepper.set_frequency(freq);
-
-    stepper.step(steps).await;
-    stepper.step_half(-steps).await;
-
-    // let mut uln2003 = uln2003::ULN2003::new(
-    //     Output::new(p.PIN_6, Level::Low),
-    //     Output::new(p.PIN_7, Level::Low),
-    //     Output::new(p.PIN_8, Level::Low),
-    //     Output::new(p.PIN_9, Level::Low),
-    //     Some(embassy_time::Delay {}),
-    // );
-
-    // uln2003.set_direction(uln2003::Direction::Normal);
-    // let _ = uln2003.step_for(4096, 2);
-    // uln2003.set_direction(uln2003::Direction::Reverse);
-    // let _ = uln2003.step_for(4096, 2);
-
+    let stepper_outputs = [
+        Output::new(p.PIN_6, Level::Low),
+        Output::new(p.PIN_7, Level::Low),
+        Output::new(p.PIN_8, Level::Low),
+        Output::new(p.PIN_9, Level::Low),
+    ];
     // spawn tasks
-    //spawner.spawn(led_task(led)).unwrap();
+    spawner.spawn(stepper_task(stepper_outputs)).unwrap();
+    spawner.spawn(led_task(led)).unwrap();
     spawner.spawn(usb_task(usb)).unwrap();
     spawner.spawn(serial_task(class)).unwrap();
     //spawner.spawn(waypoint_task(waypoint_display)).unwrap();
@@ -184,6 +150,41 @@ async fn main(spawner: Spawner) {
             draw_figure(&mut buffer, i, FIGURES[data[i] as usize]);
         }
         display.draw(&buffer).await.unwrap();
+    }
+}
+
+#[embassy_executor::task]
+async fn stepper_task(mut stepper_outputs: [Output<'static>; 4]) -> ! {
+    const PINS: usize = 4;
+    const PAUSE: u64 = 3;
+    let mut i = 0;
+    let mut count = 0;
+    let mut direction = true;
+    loop {
+        for pin in &mut stepper_outputs {
+            pin.set_low();
+        }
+        //stepper_outputs[i].set_low();
+        if direction {
+            if i < PINS - 1 {
+                i += 1;
+            } else {
+                i = 0;
+            }
+        } else {
+            if i > 0 {
+                i -= 1;
+            } else {
+                i = PINS - 1;
+            }
+        }
+        stepper_outputs[i].set_high();
+        count += 1;
+        if count > 2048 {
+            count = 0;
+            direction = !direction;
+        }
+        Timer::after_millis(PAUSE).await;
     }
 }
 

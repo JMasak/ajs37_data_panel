@@ -1,6 +1,5 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 runner = "probe-rs run --chip RP2040"
-test-runner = "arm-none-eabi-gdb -q -x debug.gdb"
 #runner = "picotool load -u -v -x -t elf"
 rustflags = ["--cfg", "portable_atomic_unsafe_assume_single_core"]
 
