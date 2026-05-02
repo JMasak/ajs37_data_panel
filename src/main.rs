@@ -2,11 +2,14 @@
 #![no_main]
 
 use crate::figures::FIGURES;
+use core::ptr::addr_of_mut;
+use cortex_m::asm::nop;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::i2c::{self, Config};
+use embassy_rp::multicore::Stack;
 use embassy_rp::peripherals::{I2C0, I2C1, USB};
 use embassy_rp::pio_programs::stepper;
 use embassy_rp::usb::{self, Driver};
@@ -38,6 +41,7 @@ const AJS37_NAV_INDICATOR_DATA_5: u16 = 0x46B0;
 const AJS37_NAV_INDICATOR_DATA_6: u16 = 0x46B2;
 
 static FIGURE_SIGNAL: Signal<ThreadModeRawMutex, [u8; 6]> = Signal::new(); // for multicore usage replace ThreadModeRawMutex with CriticalSectionRawMutex
+static mut CORE1_STACK: Stack<4096> = Stack::new();
 
 // Program metadata for `picotool info`.
 // This isn't needed, but it's recommended to have these minimal entries.
@@ -136,8 +140,17 @@ async fn main(spawner: Spawner) {
         Output::new(p.PIN_8, Level::Low),
         Output::new(p.PIN_9, Level::Low),
     ];
+
+    embassy_rp::multicore::spawn_core1(
+        p.CORE1,
+        unsafe { &mut *addr_of_mut!(CORE1_STACK) },
+        move || {
+            core1_fn(stepper_outputs);
+        },
+    );
+
     // spawn tasks
-    spawner.spawn(stepper_task(stepper_outputs)).unwrap();
+    //spawner.spawn(stepper_task(stepper_outputs)).unwrap();
     spawner.spawn(led_task(led)).unwrap();
     spawner.spawn(usb_task(usb)).unwrap();
     spawner.spawn(serial_task(class)).unwrap();
@@ -150,6 +163,67 @@ async fn main(spawner: Spawner) {
             draw_figure(&mut buffer, i, FIGURES[data[i] as usize]);
         }
         display.draw(&buffer).await.unwrap();
+    }
+}
+
+fn core1_fn(mut stepper_outputs: [Output<'static>; 4]) -> ! {
+    const PINS: usize = 4;
+    const START_DELAY: usize = 2500;
+    const MIN_DELAY: usize = 1800;
+    const BRAKE_STEPS: usize = 200;
+    const ACC_DELAY: usize = 1;
+    const ACC_STEP: usize = (START_DELAY - MIN_DELAY) / BRAKE_STEPS;
+    const STEPS: usize = 2048;
+    let mut i = 0;
+    let mut count = 0;
+    let mut direction = true;
+    let mut delay = START_DELAY;
+    let mut acc_delay_count = 0;
+
+    loop {
+        for pin in &mut stepper_outputs {
+            pin.set_low();
+        }
+        //stepper_outputs[i].set_low();
+        if direction {
+            if i < PINS - 1 {
+                i += 1;
+            } else {
+                i = 0;
+            }
+        } else {
+            if i > 0 {
+                i -= 1;
+            } else {
+                i = PINS - 1;
+            }
+        }
+        stepper_outputs[i].set_high();
+        count += 1;
+        acc_delay_count += 1;
+        if acc_delay_count > ACC_DELAY {
+            acc_delay_count = 0;
+            if count < STEPS - (BRAKE_STEPS * ACC_DELAY) {
+                if delay >= MIN_DELAY + ACC_STEP {
+                    delay -= ACC_STEP;
+                    info!("accelerating: {}", delay);
+                }
+            } else {
+                // break
+                if delay <= START_DELAY - ACC_STEP {
+                    delay += ACC_STEP;
+                    info!("braking: {}", delay);
+                }
+            }
+        }
+        if count > STEPS {
+            count = 0;
+            delay = START_DELAY;
+            direction = !direction;
+        }
+        for _ in 0..delay {
+            nop();
+        }
     }
 }
 
