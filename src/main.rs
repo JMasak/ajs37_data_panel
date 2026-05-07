@@ -7,11 +7,10 @@ use cortex_m::asm::nop;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
-use embassy_rp::gpio::{Level, Output};
+use embassy_rp::gpio::{Input, Level, Output, Pull};
 use embassy_rp::i2c::{self, Config};
 use embassy_rp::multicore::Stack;
 use embassy_rp::peripherals::{I2C0, I2C1, USB};
-use embassy_rp::pio_programs::stepper;
 use embassy_rp::usb::{self, Driver};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::signal::Signal;
@@ -20,7 +19,6 @@ use embassy_usb::class::cdc_acm::{self, CdcAcmClass};
 use embassy_usb::driver::EndpointError;
 use ssd1306::{I2CDisplayInterface, Ssd1306Async, prelude::*};
 use static_cell::StaticCell;
-//use uln2003::StepperMotor;
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -65,6 +63,9 @@ async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
     // initialize LED output
     let led = Output::new(p.PIN_25, Level::Low);
+    // initialize buttons
+    let dial_trigger = Input::new(p.PIN_21, Pull::Up);
+    let _button = Input::new(p.PIN_20, Pull::Up);
 
     // initialize I2C0 -> DataPanelDisplay
     let sda = p.PIN_0;
@@ -145,16 +146,15 @@ async fn main(spawner: Spawner) {
         p.CORE1,
         unsafe { &mut *addr_of_mut!(CORE1_STACK) },
         move || {
-            core1_fn(stepper_outputs);
+            core1_fn(stepper_outputs, dial_trigger);
         },
     );
 
     // spawn tasks
-    //spawner.spawn(stepper_task(stepper_outputs)).unwrap();
     spawner.spawn(led_task(led)).unwrap();
     spawner.spawn(usb_task(usb)).unwrap();
     spawner.spawn(serial_task(class)).unwrap();
-    //spawner.spawn(waypoint_task(waypoint_display)).unwrap();
+    spawner.spawn(waypoint_task(waypoint_display)).unwrap();
 
     // main loop
     loop {
@@ -166,14 +166,14 @@ async fn main(spawner: Spawner) {
     }
 }
 
-fn core1_fn(mut stepper_outputs: [Output<'static>; 4]) -> ! {
+fn core1_fn(mut stepper_outputs: [Output<'static>; 4], dial_trigger: Input<'static>) -> ! {
     const PINS: usize = 4;
-    const START_DELAY: usize = 2500;
+    const START_DELAY: usize = 3000;
     const MIN_DELAY: usize = 1800;
     const BRAKE_STEPS: usize = 200;
     const ACC_DELAY: usize = 1;
     const ACC_STEP: usize = (START_DELAY - MIN_DELAY) / BRAKE_STEPS;
-    const STEPS: usize = 2048;
+    const STEPS: usize = 1500;
     let mut i = 0;
     let mut count = 0;
     let mut direction = true;
@@ -181,10 +181,15 @@ fn core1_fn(mut stepper_outputs: [Output<'static>; 4]) -> ! {
     let mut acc_delay_count = 0;
 
     loop {
+        if dial_trigger.is_low() {
+            count = 0;
+            acc_delay_count = 0;
+            direction = true;
+            delay = START_DELAY;
+        }
         for pin in &mut stepper_outputs {
             pin.set_low();
         }
-        //stepper_outputs[i].set_low();
         if direction {
             if i < PINS - 1 {
                 i += 1;
@@ -206,13 +211,13 @@ fn core1_fn(mut stepper_outputs: [Output<'static>; 4]) -> ! {
             if count < STEPS - (BRAKE_STEPS * ACC_DELAY) {
                 if delay >= MIN_DELAY + ACC_STEP {
                     delay -= ACC_STEP;
-                    info!("accelerating: {}", delay);
+                    //info!("accelerating: {}", delay);
                 }
             } else {
                 // break
                 if delay <= START_DELAY - ACC_STEP {
                     delay += ACC_STEP;
-                    info!("braking: {}", delay);
+                    //info!("braking: {}", delay);
                 }
             }
         }
@@ -224,41 +229,6 @@ fn core1_fn(mut stepper_outputs: [Output<'static>; 4]) -> ! {
         for _ in 0..delay {
             nop();
         }
-    }
-}
-
-#[embassy_executor::task]
-async fn stepper_task(mut stepper_outputs: [Output<'static>; 4]) -> ! {
-    const PINS: usize = 4;
-    const PAUSE: u64 = 3;
-    let mut i = 0;
-    let mut count = 0;
-    let mut direction = true;
-    loop {
-        for pin in &mut stepper_outputs {
-            pin.set_low();
-        }
-        //stepper_outputs[i].set_low();
-        if direction {
-            if i < PINS - 1 {
-                i += 1;
-            } else {
-                i = 0;
-            }
-        } else {
-            if i > 0 {
-                i -= 1;
-            } else {
-                i = PINS - 1;
-            }
-        }
-        stepper_outputs[i].set_high();
-        count += 1;
-        if count > 2048 {
-            count = 0;
-            direction = !direction;
-        }
-        Timer::after_millis(PAUSE).await;
     }
 }
 
@@ -278,6 +248,7 @@ async fn waypoint_task(
         ssd1306::mode::BufferedGraphicsModeAsync<DisplaySize128x64>,
     >,
 ) -> ! {
+    let mut c = 0;
     let mut waypoint_buffer = [0u8; 1024];
     waypoint_display
         .set_row(0)
@@ -288,14 +259,16 @@ async fn waypoint_task(
         .await
         .expect("Could not set column");
     loop {
+        waypoint_buffer.fill(0);
         for i in 0..1024 {
-            waypoint_buffer[i] = 0xAA;
-            waypoint_display.draw(&waypoint_buffer).await.unwrap();
+            waypoint_buffer[i] = (i + c % 255) as u8;
+            c += 1;
             if i % 128 == 0 {
-                info!("Waypoint drawing new line: {}", i);
+                //info!("Waypoint drawing new line: {}", i);
             }
         }
-        waypoint_buffer.fill(0);
+        waypoint_display.draw(&waypoint_buffer).await.unwrap();
+        Timer::after_millis(250).await;
     }
 }
 
