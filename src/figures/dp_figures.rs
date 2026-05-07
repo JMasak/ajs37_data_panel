@@ -1,5 +1,6 @@
+// Figures for the Data Panel OLED display
 // OLED Display has a resolution of 128 x 32 pixels
-// Data Panel display 6 figures
+// Data Panel displays 6 figures
 // 128 / 6 = 21.33 pixels per figure -> 21 pixels per figure, 1 pixel blank left and right
 // resolution per figure: 21 pixels wide, 32 pixels tall
 pub const FIGURE_WIDTH: usize = 21;
@@ -74,6 +75,6 @@ pub const NINE: [u8; (FIGURE_WIDTH * FIGURE_HEIGHT) / FIGURE_PIXELS_PER_BYTE] = 
     0,
 ];
 
-pub const FIGURES: [&[u8]; 11] = [
+pub const DP_FIGURES: [&[u8]; 11] = [
     &ZERO, &ONE, &TWO, &THREE, &FOUR, &FIVE, &SIX, &SEVEN, &EIGHT, &NINE, &NONE,
 ];

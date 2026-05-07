@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use crate::figures::FIGURES;
+use crate::figures::DP_FIGURES;
 use core::ptr::addr_of_mut;
 use cortex_m::asm::nop;
 use defmt::*;
@@ -79,7 +79,7 @@ async fn main(spawner: Spawner) {
     display.init().await.unwrap();
     let mut buffer = [0u8; 512];
     for i in 0..6 {
-        draw_figure(&mut buffer, i, FIGURES[8]);
+        draw_figure(&mut buffer, i, DP_FIGURES[8]);
     }
     display.draw(&buffer).await.unwrap();
 
@@ -160,7 +160,7 @@ async fn main(spawner: Spawner) {
     loop {
         let data = FIGURE_SIGNAL.wait().await;
         for i in 0..6 {
-            draw_figure(&mut buffer, i, FIGURES[data[i] as usize]);
+            draw_figure(&mut buffer, i, DP_FIGURES[data[i] as usize]);
         }
         display.draw(&buffer).await.unwrap();
     }
@@ -176,7 +176,7 @@ fn core1_fn(mut stepper_outputs: [Output<'static>; 4], dial_trigger: Input<'stat
     const STEPS: usize = 1500;
     let mut i = 0;
     let mut count = 0;
-    let mut direction = true;
+    let mut direction = false; // turn counter clockwise initially to reference with dial trigger
     let mut delay = START_DELAY;
     let mut acc_delay_count = 0;
 
@@ -456,13 +456,17 @@ fn draw_value(buffer: &mut [u8], value: u32) {
         let glyph = {
             if digit == 0 {
                 if first {
-                    if i == 5 { FIGURES[0] } else { FIGURES[10] }
+                    if i == 5 {
+                        DP_FIGURES[0]
+                    } else {
+                        DP_FIGURES[10]
+                    }
                 } else {
-                    FIGURES[0]
+                    DP_FIGURES[0]
                 }
             } else {
                 first = false;
-                FIGURES[digit as usize]
+                DP_FIGURES[digit as usize]
             }
         };
         draw_figure(buffer, i, glyph);
