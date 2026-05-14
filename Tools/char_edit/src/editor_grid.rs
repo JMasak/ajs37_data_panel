@@ -1,4 +1,7 @@
-use macroquad::{color::Color, shapes::draw_rectangle};
+use macroquad::{
+    color::Color,
+    shapes::{draw_line, draw_rectangle},
+};
 use simple_string_patterns::alphanumeric::StripCharacters;
 
 const SIZE_X: usize = 64; //21;
@@ -57,6 +60,28 @@ impl EditorGrid {
                 );
             }
         }
+
+        let middle_x =
+            self.start_x + self.scale + ((SIZE_X / 2) * (TILE_SIZE + 1)) as f32 * self.scale;
+        let middle_y =
+            self.start_y + self.scale + ((SIZE_Y / 2) * (TILE_SIZE + 1)) as f32 * self.scale;
+        let color_red = Color::new(1.0, 0.0, 0.0, 1.0);
+        draw_line(
+            middle_x,
+            self.start_y,
+            middle_x,
+            min_height * self.scale,
+            1.1,
+            color_red,
+        );
+        draw_line(
+            self.start_x,
+            middle_y,
+            min_width * self.scale,
+            middle_y,
+            1.1,
+            color_red,
+        );
     }
 
     pub fn click(&mut self, posx: f32, posy: f32) {

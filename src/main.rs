@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use crate::figures::DP_FIGURES;
 use core::ptr::addr_of_mut;
 use cortex_m::asm::nop;
 use defmt::*;
@@ -24,6 +23,8 @@ use {defmt_rtt as _, panic_probe as _};
 
 mod dcs_bios;
 mod figures;
+
+use figures::dp_figures::DP_FIGURES;
 
 type MyUsbDriver = usb::Driver<'static, USB>;
 type MyUsbDevice = embassy_usb::UsbDevice<'static, MyUsbDriver>;
@@ -79,7 +80,7 @@ async fn main(spawner: Spawner) {
     display.init().await.unwrap();
     let mut buffer = [0u8; 512];
     for i in 0..6 {
-        draw_figure(&mut buffer, i, DP_FIGURES[8]);
+        draw_dp_figure(&mut buffer, i, DP_FIGURES[8]);
     }
     display.draw(&buffer).await.unwrap();
 
@@ -160,7 +161,7 @@ async fn main(spawner: Spawner) {
     loop {
         let data = FIGURE_SIGNAL.wait().await;
         for i in 0..6 {
-            draw_figure(&mut buffer, i, DP_FIGURES[data[i] as usize]);
+            draw_dp_figure(&mut buffer, i, DP_FIGURES[data[i] as usize]);
         }
         display.draw(&buffer).await.unwrap();
     }
@@ -248,7 +249,6 @@ async fn waypoint_task(
         ssd1306::mode::BufferedGraphicsModeAsync<DisplaySize128x64>,
     >,
 ) -> ! {
-    let mut c = 0;
     let mut waypoint_buffer = [0u8; 1024];
     waypoint_display
         .set_row(0)
@@ -259,14 +259,8 @@ async fn waypoint_task(
         .await
         .expect("Could not set column");
     loop {
-        waypoint_buffer.fill(0);
-        for i in 0..1024 {
-            waypoint_buffer[i] = (i + c % 255) as u8;
-            c += 1;
-            if i % 128 == 0 {
-                //info!("Waypoint drawing new line: {}", i);
-            }
-        }
+        draw_wp_figure(&mut waypoint_buffer, 0, &figures::wp_figures::FL);
+        draw_wp_figure(&mut waypoint_buffer, 1, &figures::wp_figures::FB);
         waypoint_display.draw(&waypoint_buffer).await.unwrap();
         Timer::after_millis(250).await;
     }
@@ -434,13 +428,23 @@ fn check_for_start_of_frame(input_buffer: &[u8], read_offset: usize, write_offse
     false
 }
 
-pub fn draw_figure(buffer: &mut [u8], index: usize, figure: &[u8]) {
-    let offset = index * 21 + 1;
-    for i in 0..21 {
-        buffer[offset + i] = figure[i];
-        buffer[offset + i + 128] = figure[i + 21];
-        buffer[offset + i + 256] = figure[i + 42];
-        buffer[offset + i + 384] = figure[i + 63];
+pub fn draw_dp_figure(buffer: &mut [u8], index: usize, figure: &[u8]) {
+    use figures::dp_figures::{FIGURE_WIDTH, LINE_BLOCKS, LINE_WIDTH};
+    let offset = index * FIGURE_WIDTH + 1;
+    for i in 0..FIGURE_WIDTH {
+        for l in 0..LINE_BLOCKS {
+            buffer[offset + i + LINE_WIDTH * l] = figure[i + FIGURE_WIDTH * l];
+        }
+    }
+}
+
+pub fn draw_wp_figure(buffer: &mut [u8], index: usize, figure: &[u8]) {
+    use figures::wp_figures::{FIGURE_WIDTH, LINE_BLOCKS, LINE_WIDTH};
+    let offset = index * FIGURE_WIDTH;
+    for i in 0..FIGURE_WIDTH {
+        for l in 0..LINE_BLOCKS {
+            buffer[offset + i + LINE_WIDTH * l] = figure[i + FIGURE_WIDTH * l];
+        }
     }
 }
 
@@ -469,7 +473,7 @@ fn draw_value(buffer: &mut [u8], value: u32) {
                 DP_FIGURES[digit as usize]
             }
         };
-        draw_figure(buffer, i, glyph);
+        draw_dp_figure(buffer, i, glyph);
         i += 1;
     }
 }

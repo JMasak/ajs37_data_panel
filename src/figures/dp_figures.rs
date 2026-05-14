@@ -3,6 +3,8 @@
 // Data Panel displays 6 figures
 // 128 / 6 = 21.33 pixels per figure -> 21 pixels per figure, 1 pixel blank left and right
 // resolution per figure: 21 pixels wide, 32 pixels tall
+pub const LINE_WIDTH: usize = 128;
+pub const LINE_BLOCKS: usize = 32 / 8;
 pub const FIGURE_WIDTH: usize = 21;
 pub const FIGURE_HEIGHT: usize = 32;
 pub const FIGURE_PIXELS_PER_BYTE: usize = 8;
