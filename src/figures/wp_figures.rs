@@ -16,6 +16,8 @@ pub const FIGURE_PIXELS_PER_BYTE: usize = 8;
 pub const NONE: [u8; (FIGURE_WIDTH * FIGURE_HEIGHT) / FIGURE_PIXELS_PER_BYTE] =
     [0; (FIGURE_WIDTH * FIGURE_HEIGHT) / FIGURE_PIXELS_PER_BYTE];
 
+pub const FIGS: [&[u8]; 10] = [&FB, &FBX, &FE, &FL, &FLB, &FLF, &FM, &FR, &FS, &FU];
+
 pub const FL: [u8; (FIGURE_WIDTH * FIGURE_HEIGHT) / FIGURE_PIXELS_PER_BYTE] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252, 252, 252, 252, 252, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

@@ -250,6 +250,8 @@ async fn waypoint_task(
     >,
 ) -> ! {
     let mut waypoint_buffer = [0u8; 1024];
+    let mut count1 = 0;
+    let mut count2 = 0;
     waypoint_display
         .set_row(0)
         .await
@@ -259,10 +261,24 @@ async fn waypoint_task(
         .await
         .expect("Could not set column");
     loop {
-        draw_wp_figure(&mut waypoint_buffer, 0, &figures::wp_figures::FL);
-        draw_wp_figure(&mut waypoint_buffer, 1, &figures::wp_figures::FB);
+        let t = Timer::after_millis(1000);
+        draw_wp_figure(
+            &mut waypoint_buffer,
+            0,
+            &figures::wp_figures::FIGS[count2 % 10],
+        );
+        draw_wp_figure(
+            &mut waypoint_buffer,
+            1,
+            &figures::wp_figures::FIGS[count1 % 10],
+        );
+        count1 += 1;
+        if count1 >= 10 {
+            count2 += 1;
+            count1 = 0;
+        }
         waypoint_display.draw(&waypoint_buffer).await.unwrap();
-        Timer::after_millis(250).await;
+        t.await;
     }
 }
 
