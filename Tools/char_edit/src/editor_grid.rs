@@ -1,8 +1,8 @@
 use macroquad::{color::Color, shapes::draw_rectangle};
 use simple_string_patterns::alphanumeric::StripCharacters;
 
-const SIZE_X: usize = 21;
-const SIZE_Y: usize = 32;
+const SIZE_X: usize = 64; //21;
+const SIZE_Y: usize = 64; //32;
 const TILE_SIZE: usize = 8;
 
 pub struct EditorGrid {
@@ -130,6 +130,50 @@ impl EditorGrid {
                     self.pixels[x + (y * 8 + i) * SIZE_X] = (value & (1 << i)) != 0;
                 }
             }
+        }
+    }
+
+    pub fn shift_left(&mut self) {
+        for y in 0..SIZE_Y {
+            for x in 1..SIZE_X {
+                let index = x + y * SIZE_X;
+                self.pixels[index - 1] = self.pixels[index];
+            }
+            self.pixels[y * SIZE_X + SIZE_X - 1] = false;
+        }
+    }
+
+    pub fn shift_right(&mut self) {
+        for y in 0..SIZE_Y {
+            for x in 1..SIZE_X {
+                let index = y * SIZE_X + SIZE_X - x;
+                self.pixels[index] = self.pixels[index - 1];
+            }
+            self.pixels[y * SIZE_X] = false;
+        }
+    }
+
+    pub fn shift_up(&mut self) {
+        for y in 1..SIZE_Y {
+            for x in 0..SIZE_X {
+                let index = x + y * SIZE_X;
+                self.pixels[index - SIZE_X] = self.pixels[index];
+            }
+        }
+        for x in 0..SIZE_X {
+            self.pixels[(SIZE_Y - 1) * SIZE_X + x] = false;
+        }
+    }
+
+    pub fn shift_down(&mut self) {
+        for y in 1..(SIZE_Y) {
+            for x in 0..SIZE_X {
+                let index = x + (SIZE_Y - 1 - y) * SIZE_X;
+                self.pixels[index + SIZE_X] = self.pixels[index];
+            }
+        }
+        for x in 0..SIZE_X {
+            self.pixels[x] = false;
         }
     }
 }
